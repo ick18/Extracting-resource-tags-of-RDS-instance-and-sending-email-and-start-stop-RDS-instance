@@ -1,0 +1,82 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template for deploying Lambda functions with SES and RDS control
+
+Parameters:
+  LambdaFunctionName:
+    Type: String
+    Description: Name for the Lambda function
+    Default: MyCombinedLambda
+
+Resources:
+  EmailSendingLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaSESAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                  - ses:SendRawEmail
+                Resource: '*'
+        - PolicyName: LambdaRDSDescribeAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: rds:DescribeDBInstances
+                Resource: '*'
+        - PolicyName: LambdaCloudWatchLogsAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+
+  EmailSendingLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref LambdaFunctionName
+      Code:
+        S3Bucket: extractrds-bucket  # Replace with your S3 bucket name
+        S3Key: extractrds/extractrds.zip  # Update with actual S3 key
+      Handler: extractrds.lambda_handler
+      Role: !GetAtt EmailSendingLambdaRole.Arn
+      Runtime: python3.8
+      Timeout: 30
+
+  LambdaEventPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref EmailSendingLambdaFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt EmailScheduledRule.Arn
+
+  EmailScheduledRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Scheduled rule to trigger email Lambda based on tags"
+      ScheduleExpression: cron(26/2 12 29 8 ? 2023)  # Every 4 minutes
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt EmailSendingLambdaFunction.Arn
+          Id: "EmailTargetFunctionV1"
+
+Outputs:
+  EmailLambdaFunctionARN:
+    Description: ARN of the deployed email Lambda function
+    Value: !GetAtt EmailSendingLambdaFunction.Arn

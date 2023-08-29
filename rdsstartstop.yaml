@@ -1,0 +1,122 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Resources:
+  StartRDSFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: StartRDSFunction
+      Code:
+        S3Bucket: rdsstartstop-bucket
+        S3Key: rdsstart/rdsstart.zip
+      Handler: rdsstart.lambda_handler
+      Role: !GetAtt StartRDSExecutionRole.Arn
+      Runtime: python3.8
+      Timeout: 30
+      TracingConfig:
+        Mode: Active
+
+  StartRDSExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: StartRDSPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds:StartDBInstance
+                  - rds:DescribeDBInstances
+                  - rds:ListTagsForResource
+                Resource: '*'
+
+  StartRDSRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Scheduled rule to start RDS instances"
+      ScheduleExpression: "cron(54 19 29 8 ? 2023)"  # Update with desired cron expression
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt StartRDSFunction.Arn
+          Id: StartRDSInstanceTarget
+
+  StartRDSPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref StartRDSFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt StartRDSRule.Arn
+
+  StopRDSFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: StopRDSFunction
+      Code:
+        S3Bucket: rdsstartstop-bucket
+        S3Key: rdsstop/rdsstop.zip
+      Handler: rdsstop.lambda_handler
+      Role: !GetAtt StopRDSExecutionRole.Arn
+      Runtime: python3.8
+      Timeout: 30
+      TracingConfig:
+        Mode: Active
+
+  StopRDSExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: StopRDSPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds:StopDBInstance
+                  - rds:DescribeDBInstances
+                  - rds:ListTagsForResource
+                Resource: '*'
+
+  StopRDSRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: "Scheduled rule to stop RDS instances"
+      ScheduleExpression: "cron(43 19 29 8 ? 2023)"  # Update with desired cron expression
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt StopRDSFunction.Arn
+          Id: StopRDSInstanceTarget
+
+  StopRDSPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref StopRDSFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt StopRDSRule.Arn
+
+Outputs:
+  StartRDSFunctionArn:
+    Description: "ARN of the Start RDS Function"
+    Value: !GetAtt StartRDSFunction.Arn
+
+  StopRDSFunctionArn:
+    Description: "ARN of the Stop RDS Function"
+    Value: !GetAtt StopRDSFunction.Arn
